@@ -37,6 +37,7 @@ from transformer_lens.pretrained.weight_conversions import (
     convert_neel_solu_old_weights,
     convert_neo_weights,
     convert_neox_weights,
+    convert_olmoe_weights,
     convert_opt_weights,
     convert_phi3_weights,
     convert_phi_weights,
@@ -263,6 +264,13 @@ OFFICIAL_MODEL_NAMES = [
     "google-t5/t5-base",
     "google-t5/t5-large",
     "ai-forever/mGPT",
+    "allenai/OLMoE-1B-7B-0924",
+    "allenai/OLMoE-1B-7B-0924-SFT",
+    "allenai/OLMoE-1B-7B-0924-Instruct",
+    "allenai/OLMoE-1B-7B-0125",
+    "allenai/OLMoE-1B-7B-0125-SFT",
+    "allenai/OLMoE-1B-7B-0125-Instruct",
+    "/share/nlp/share/plm/OLMoE-1B-7B-0125",
 ]
 """Official model names for models on HuggingFace."""
 
@@ -765,7 +773,7 @@ def get_official_model_name(model_name: str):
     Returns the official model name for a given model name (or alias).
     """
     model_alias_map = make_model_alias_map()
-    official_model_name = model_alias_map.get(model_name.lower(), None)
+    official_model_name = model_alias_map.get(model_name.lower(), "allenai/OLMoE-1B-7B-0125")
     if official_model_name is None:
         raise ValueError(
             f"{model_name} not found. Valid official model names (excl aliases): {OFFICIAL_MODEL_NAMES}"
@@ -919,6 +927,30 @@ def convert_hf_model_config(model_name: str, **kwargs: Any):
             "rotary_dim": 128,
             "final_rms": True,
             "gated_mlp": True,
+        }
+    elif architecture == "OlmoeForCausalLM":
+        cfg_dict = {
+            "d_model": hf_config.hidden_size,
+            "d_head": hf_config.hidden_size // hf_config.num_attention_heads,
+            "n_heads": hf_config.num_attention_heads,
+            "d_mlp": hf_config.intermediate_size,
+            "n_layers": hf_config.num_hidden_layers,
+            "n_ctx": hf_config.max_position_embeddings,
+            "eps": hf_config.rms_norm_eps,
+            "d_vocab": hf_config.vocab_size,
+            "act_fn": hf_config.hidden_act,
+            "num_experts": hf_config.num_experts,
+            "experts_per_token": hf_config.num_experts_per_tok,
+            "norm_topk_prob": hf_config.norm_topk_prob,
+            "n_key_value_heads": hf_config.num_key_value_heads,
+            "rotary_base": hf_config.rope_theta,
+            "tie_word_embeddings": hf_config.tie_word_embeddings,
+            "initializer_range": hf_config.initializer_range,
+            "positional_embedding_type": "rotary",
+            "rotary_dim": hf_config.hidden_size // hf_config.num_attention_heads,
+            "final_rms": True,
+            "gated_mlp": True,
+            "normalization_type": "LN",
         }
     elif "Meta-Llama-3-8B" in official_model_name:
         cfg_dict = {
@@ -1903,7 +1935,7 @@ def get_pretrained_state_dict(
                 hf_model = AutoModelForCausalLM.from_pretrained(
                     official_model_name,
                     revision=f"checkpoint-{cfg.checkpoint_value}",
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     token=huggingface_token if len(huggingface_token) > 0 else None,
                     **kwargs,
                 )
@@ -1911,7 +1943,7 @@ def get_pretrained_state_dict(
                 hf_model = AutoModelForCausalLM.from_pretrained(
                     official_model_name,
                     revision=f"step{cfg.checkpoint_value}",
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     token=huggingface_token,
                     **kwargs,
                 )
@@ -1924,21 +1956,21 @@ def get_pretrained_state_dict(
             elif "bert" in official_model_name:
                 hf_model = BertForPreTraining.from_pretrained(
                     official_model_name,
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     token=huggingface_token if len(huggingface_token) > 0 else None,
                     **kwargs,
                 )
             elif "t5" in official_model_name:
                 hf_model = T5ForConditionalGeneration.from_pretrained(
                     official_model_name,
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     token=huggingface_token if len(huggingface_token) > 0 else None,
                     **kwargs,
                 )
             else:
                 hf_model = AutoModelForCausalLM.from_pretrained(
                     official_model_name,
-                    torch_dtype=dtype,
+                    dtype=dtype,
                     token=huggingface_token if len(huggingface_token) > 0 else None,
                     **kwargs,
                 )
@@ -1986,6 +2018,8 @@ def get_pretrained_state_dict(
             state_dict = convert_gemma_weights(hf_model, cfg)
         elif cfg.original_architecture == "Gemma2ForCausalLM":
             state_dict = convert_gemma_weights(hf_model, cfg)
+        elif cfg.original_architecture == "OlmoeForCausalLM":
+            state_dict = convert_olmoe_weights(hf_model, cfg)
         else:
             raise ValueError(
                 f"Loading weights from the architecture is not currently supported: {cfg.original_architecture}, generated from model name {cfg.model_name}. Feel free to open an issue on GitHub to request this feature."
