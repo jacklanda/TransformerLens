@@ -164,6 +164,7 @@ class HookedTransformer(HookedRootModule):
                 add_bos_token = self.cfg.original_architecture not in [
                     "OlmoForCausalLM",
                     "OlmoeForCausalLM",
+                    "GptOssForCausalLM",
                 ]
                 self.set_tokenizer(
                     AutoTokenizer.from_pretrained(
@@ -741,6 +742,7 @@ class HookedTransformer(HookedRootModule):
         if self.cfg.original_architecture not in [
             "OlmoForCausalLM",
             "OlmoeForCausalLM",
+            "GptOssForCausalLM",
         ]:
             tokenizer_with_bos = utils.get_tokenizer_with_bos(tokenizer)
         else:
